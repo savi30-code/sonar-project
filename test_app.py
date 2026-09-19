@@ -121,6 +121,9 @@ def test_secure_request(monkeypatch):
 
 def test_read_file_valid(monkeypatch):
     class FakeRequestedFile:
+        def resolve(self):
+            return self
+
         def is_file(self):
             return True
 
