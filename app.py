@@ -2,113 +2,149 @@ import os
 import sqlite3
 import subprocess
 import hashlib
-import pickle
-import yaml
-import tempfile
+import secrets
+import json
 import logging
+from pathlib import Path
+
 
 # ============================================================
-# SAST DEMONSTRATION PROJECT
-# This file intentionally contains security vulnerabilities.
+# SECURE SAST DEMONSTRATION PROJECT
 # ============================================================
 
 
-# 1. HARDCODED PASSWORD
-# Vulnerability: Password is directly written in source code.
-DB_PASSWORD = "Admin@123"
+# 1. Hardcoded password - FIXED
+DB_PASSWORD = os.environ.get("DB_PASSWORD")
 
 
-# 2. HARDCODED SECRET KEY
-# Vulnerability: Secret key should not be stored in source code.
-SECRET_KEY = "my_super_secret_key_12345"
+# 2. Hardcoded secret - FIXED
+SECRET_KEY = os.environ.get("SECRET_KEY")
 
 
-# 3. SQL INJECTION
-# Vulnerability: User input is directly concatenated into SQL query.
+# 3. SQL injection - FIXED
 def get_user(username):
     connection = sqlite3.connect("users.db")
-    cursor = connection.cursor()
 
-    query = "SELECT * FROM users WHERE username = '" + username + "'"
+    try:
+        cursor = connection.cursor()
 
-    cursor.execute(query)
-    return cursor.fetchall()
+        query = "SELECT * FROM users WHERE username = ?"
+
+        cursor.execute(query, (username,))
+
+        return cursor.fetchall()
+
+    finally:
+        connection.close()
 
 
-# 4. COMMAND INJECTION
-# Vulnerability: User input is passed directly to a shell command.
+# 4. Command injection - FIXED
 def ping_host(host):
-    command = "ping " + host
-    result = subprocess.run(command, shell=True, capture_output=True)
+    result = subprocess.run(
+        ["ping", "-n", "4", host],
+        shell=False,
+        capture_output=True,
+        text=True,
+        check=False
+    )
+
     return result.stdout
 
 
-# 5. INSECURE EVAL
-# Vulnerability: eval() executes arbitrary Python expressions.
-def calculate(expression):
-    return eval(expression)
+# 5. eval injection - FIXED
+def calculate(a, b, operation):
+    if operation == "add":
+        return a + b
+
+    if operation == "subtract":
+        return a - b
+
+    if operation == "multiply":
+        return a * b
+
+    if operation == "divide":
+        if b == 0:
+            raise ValueError("Cannot divide by zero")
+
+        return a / b
+
+    raise ValueError("Invalid operation")
 
 
-# 6. INSECURE DESERIALIZATION
-# Vulnerability: pickle.loads() can execute malicious serialized code.
+# 6. Insecure deserialization - FIXED
 def load_user_data(data):
-    return pickle.loads(data)
+    if isinstance(data, bytes):
+        data = data.decode("utf-8")
+
+    return json.loads(data)
 
 
-# 7. WEAK HASHING ALGORITHM
-# Vulnerability: MD5 is cryptographically weak.
+# 7. Weak hashing - FIXED
 def hash_password(password):
-    return hashlib.md5(password.encode()).hexdigest()
+    salt = secrets.token_bytes(16)
+
+    password_hash = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt,
+        100000
+    )
+
+    return salt.hex() + ":" + password_hash.hex()
 
 
-# 8. SSL CERTIFICATE VERIFICATION DISABLED
-# Vulnerability: Disabling certificate verification enables MITM attacks.
-def insecure_request():
+# 8. SSL verification disabled - FIXED
+def secure_request():
     import requests
 
     response = requests.get(
         "https://example.com",
-        verify=False
+        verify=True,
+        timeout=10
     )
 
     return response.text
 
 
-# 9. PATH TRAVERSAL
-# Vulnerability: User-controlled filename can access unintended files.
+# 9. Path traversal - FIXED
 def read_file(filename):
-    with open("/var/www/" + filename, "r") as file:
-        return file.read()
+    base_directory = Path("/var/www").resolve()
+
+    requested_file = (base_directory / filename).resolve()
+
+    try:
+        requested_file.relative_to(base_directory)
+    except ValueError as error:
+        raise ValueError("Invalid file path") from error
+
+    if not requested_file.is_file():
+        raise FileNotFoundError("File does not exist")
+
+    return requested_file.read_text(encoding="utf-8")
 
 
-# 10. DEBUG MODE ENABLED
-# Vulnerability: Debug mode may expose sensitive application details.
+# 10. Debug mode - FIXED
 def start_application(app):
     app.run(
         host="0.0.0.0",
-        debug=True
+        debug=False
     )
 
 
-# 11. INSECURE RANDOMNESS
-# Vulnerability: Standard random generator is unsuitable for security tokens.
+# 11. Insecure randomness - FIXED
 def generate_token():
-    import random
-
-    return str(random.randint(100000, 999999))
+    return secrets.token_hex(32)
 
 
-# 12. SENSITIVE INFORMATION IN LOGS
-# Vulnerability: Password is written to application logs.
+# 12. Sensitive information in logs - FIXED
 def login(username, password):
-    logging.warning(
-        "Login attempt: username=%s password=%s",
-        username,
-        password
+    logging.info(
+        "Login attempt for username=%s",
+        username
     )
 
     return True
 
 
 if __name__ == "__main__":
-    print("SAST Vulnerability Demonstration Application")
+    print("SAST Secure Application")
