@@ -137,7 +137,7 @@ def generate_token():
 
 
 # 12. Sensitive information in logs - FIXED
-def login(username, password):
+def login(username):
     logging.info(
         "Login attempt for username=%s",
         username
